@@ -1,0 +1,154 @@
+library(shiny)
+library(leaflet)
+library(ggplot2)
+library(plotly)
+library(DT)
+
+# Load data from CSV file
+samoa_data <- read.csv("samoa_historical_gdp.csv")
+
+# Extend data to include projections to 2030
+library(dplyr)
+library(tidyr)
+library(forecast)
+
+gdp_model <- lm(GDP.Nominal..Current.USD. ~ Year, data = samoa_data)
+pop_model <- lm(Population ~ Year, data = samoa_data)
+
+future_years <- data.frame(Year = seq(max(samoa_data$Year) + 1, 2030))
+
+gdp_projection <- predict(gdp_model, newdata = future_years)
+pop_projection <- predict(pop_model, newdata = future_years)
+
+future_data <- future_years %>%
+  mutate(
+    GDP.Nominal..Current.USD. = gdp_projection,
+    Population = pop_projection
+  )
+
+samoa_data_extended <- bind_rows(samoa_data, future_data)
+
+ui <- fluidPage(
+  titlePanel("Samoa Dashboard"),
+  
+  navbarPage(
+    "Samoa Analysis",
+    
+    # Topic 1: General Description
+    tabPanel(
+      "General Description",
+      fluidRow(
+        column(6, leafletOutput("map_world")),
+        column(6, leafletOutput("map_samoa"))
+      ),
+      fluidRow(
+        column(12,
+               h3("Key Facts About Samoa"),
+               p(tags$b("Government:")),
+               p("Samoa is a parliamentary democracy with a unicameral legislature called the Fono. The Prime Minister heads the government, and independence was achieved on January 1, 1962. The legal system blends English common law and Samoan customary law (fa’a Samoa)."),
+               p(tags$b("Economy:")),
+               p("Samoa’s economy relies on agriculture, fisheries, tourism, and remittances. Major challenges include vulnerability to natural disasters, reliance on imports, and limited industrial capacity. The currency is the Samoan tala (WST)."),
+               p(tags$b("People and Society:")),
+               p("Samoa has a population of approximately 220,000, primarily ethnic Samoans, with a culture deeply rooted in ‘fa’a Samoa’ emphasizing family and community. Samoan and English are official languages, and Christianity is the predominant religion."),
+               p(tags$b("Natural Environment:")),
+               p("Samoa consists of two main islands (Upolu and Savai’i) with a tropical climate, rich biodiversity, and significant natural hazards such as cyclones and tsunamis. Conservation efforts focus on protecting endangered species and promoting sustainable tourism."),
+               p(tags$b("History:")),
+               p("Inhabited for over 3,000 years, Samoa became independent in 1962 after periods of German and New Zealand administration. Its culture combines traditional customs and modern governance.")
+        )
+      )
+    ),
+    
+    # Topic 2: Projections
+    tabPanel(
+      "Projections",
+      fluidRow(
+        column(6, plotlyOutput("gdp_nominal_plot")),
+        column(6, plotlyOutput("population_plot"))
+      )
+    ),
+    
+    # Topic 3: Regional Comparison
+    tabPanel(
+      "Regional Comparison",
+      fluidRow(
+        column(12, DTOutput("regional_comparison"))
+      )
+    ),
+    # Topic 4: SWOT Analysis
+    tabPanel(
+      "SWOT Analysis",
+      fluidRow(
+        column(12, plotOutput("swot_chart"))
+      )
+    )
+  )
+)
+
+server <- function(input, output, session) {
+  # Map: Samoa in the World
+  output$map_world <- renderLeaflet({
+    leaflet() %>%
+      addTiles() %>%
+      setView(lng = 180, lat = -14, zoom = 2) %>%
+      addMarkers(lng = 180, lat = -14, popup = "Samoa (in the South Pacific)")
+  })
+  
+  # Map: Samoa Zoomed In
+  output$map_samoa <- renderLeaflet({
+    leaflet() %>%
+      addTiles() %>%
+      setView(lng = -172.1, lat = -13.8, zoom = 8) %>%
+      addMarkers(lng = -172.1, lat = -13.8, popup = "Apia, Samoa")
+  })
+  
+  # GDP Nominal Projection Plot
+  output$gdp_nominal_plot <- renderPlotly({
+    g <- ggplot(samoa_data_extended, aes(x = Year, y = GDP.Nominal..Current.USD.)) +
+      geom_line(color = "blue") +
+      geom_smooth(method = "lm", color = "red", linetype = "dashed") +
+      labs(title = "GDP Nominal Projection", x = "Year", y = "GDP Nominal (USD)") +
+      theme_minimal()
+    ggplotly(g)
+  })
+  
+  # Population Projection Plot
+  output$population_plot <- renderPlotly({
+    p <- ggplot(samoa_data_extended, aes(x = Year, y = Population)) +
+      geom_line(color = "green") +
+      geom_smooth(method = "lm", color = "red", linetype = "dashed") +
+      labs(title = "Population Projection", x = "Year", y = "Population") +
+      theme_minimal()
+    ggplotly(p)
+  })
+  
+  # Regional Comparison Table
+  output$regional_comparison <- renderDT({
+    data.frame(
+      Country = c("Samoa", "Fiji", "Tonga", "Wallis and Futuna", "Tuvalu", "Tokelau", "Hawaii", "Niue"),
+      `Distance (km)` = c(0, 1152, 889, 483, 1151, 519, 4190, 610),
+      `GDP (Millions)` = c(1020, 5800, 581, 132, 66, 12, 89400, 35),
+      Population = c(218019, 928784, 104175, 11277, 2551, 9646, 1432619, 1820),
+      Year = rep(2024, 8)
+    )
+  })
+  
+  # SWOT Analysis Chart
+  output$swot_chart <- renderPlot({
+    library(ggplot2)
+    
+    ggplot() +
+      annotate("rect", xmin = -1, xmax = 0, ymin = 0, ymax = 1, fill = "green", alpha = 0.2) +
+      annotate("rect", xmin = -1, xmax = 0, ymin = -1, ymax = 0, fill = "red", alpha = 0.2) +
+      annotate("rect", xmin = 0, xmax = 1, ymin = 0, ymax = 1, fill = "blue", alpha = 0.2) +
+      annotate("rect", xmin = 0, xmax = 1, ymin = -1, ymax = 0, fill = "orange", alpha = 0.2) +
+      geom_text(aes(x = 0, y = 0, label = "SWOT Analysis"), size = 8, fontface = "bold") +
+      annotate("text", x = -0.5, y = 0.5, label = "Strengths:\n- Natural beauty\n- Rich culture\n- Strategic location", size = 5, hjust = 0.5) +
+      annotate("text", x = -0.5, y = -0.5, label = "Weaknesses:\n- Tourism dependence\n- Disaster vulnerability\n- Infrastructure gaps", size = 5, hjust = 0.5) +
+      annotate("text", x = 0.5, y = 0.5, label = "Opportunities:\n- Sustainable tourism\n- Renewable energy\n- Regional cooperation", size = 5, hjust = 0.5) +
+      annotate("text", x = 0.5, y = -0.5, label = "Threats:\n- Climate change\n- Overfishing\n- Economic shocks", size = 5, hjust = 0.5) +
+      coord_fixed() +
+      theme_void()
+  })
+}
+
+shinyApp(ui, server)
