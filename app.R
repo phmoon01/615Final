@@ -158,7 +158,3 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui, server)
-
-# Deploy the App
-rsconnect::deployApp("C:/Users/phmoo/OneDrive/Documents/615Final")
-
